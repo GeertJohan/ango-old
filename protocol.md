@@ -44,5 +44,8 @@ Every message sent over the websocket follows a basic structure, with child elem
 	// type "lou": the new version of the linked object
 	// optional for types "rej", "res", "not"
 	data: {},
+
+	// error string
+	// can be set for type reqd
 }
 ```

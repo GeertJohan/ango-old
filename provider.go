@@ -13,9 +13,12 @@ type Provider struct {
 	// conn id counter
 	idCounter incremental.Uint64
 
-	// BeforeWebsocketCheck can be set to perform additional checks on a new connection (e.g. auth, check origin, etc.)
+	// BeforeWebsocket can be set to perform additional checks on a new connection (e.g. auth, check origin, etc.)
 	// When false is returned, the connection is dropped. The funciton itself is responsible for correcly replying to the client with a http status code
-	BeforeWebsocketCheck func(w http.ResponseWriter, r *http.Request) bool
+	BeforeWebsocket func(w http.ResponseWriter, r *http.Request) bool
+
+	// Debug, when true, all activities below this device log debug messages to stdout
+	Debug bool
 }
 
 // NewProvider create a new Provider instance
@@ -39,7 +42,7 @@ func (p *Provider) setupWebsocket(wsConn *websocket.Conn) {
 // It provides a websocket for each incomming request
 func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// perform BeforeWebsocketCheck
-	if p.BeforeWebsocketCheck != nil && !p.BeforeWebsocketCheck(w, r) {
+	if p.BeforeWebsocket != nil && !p.BeforeWebsocket(w, r) {
 		return
 	}
 	// start websocket

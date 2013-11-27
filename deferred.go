@@ -7,7 +7,7 @@ import (
 // Deferred provides methods to update a deferred in the angularjs client
 type Deferred struct {
 	conn       Conn
-	deferredID int64
+	deferredID uint64
 	done       bool
 }
 
