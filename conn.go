@@ -160,17 +160,25 @@ func (c *Conn) sendMessage(msg *messageOut) error {
 	return nil
 }
 
+func (c *Conn) sendRequestResponse(typ string, cbid uint64) error {
+	out := &messageOut{
+		Type:       typ,
+		CallbackID: &cbid,
+	}
+	return c.sendMessage(out)
+}
+
 func (c *Conn) receiveAndHandle() {
 
 	go func() {
 		time.Sleep(1 * time.Second)
 		log.Println("going to call echo")
 		err := c.CallAndWait("echo", "some data", func(data json.RawMessage) {
-			log.Printf("have resolve:\n %s\n", hex.Dump(data))
+			log.Printf("have resolve:\n%s\n", hex.Dump(data))
 		}, func(data json.RawMessage) {
-			log.Printf("have reject:\n %s\n", hex.Dump(data))
+			log.Printf("have reject:\n%s\n", hex.Dump(data))
 		}, func(data json.RawMessage) {
-			log.Printf("have notification:\n %s\n", hex.Dump(data))
+			log.Printf("have notification:\n%s\n", hex.Dump(data))
 		})
 		if err != nil {
 			log.Printf("error calling echo: %s\n", err)
@@ -201,11 +209,25 @@ func (c *Conn) receiveAndHandle() {
 		// case "lou": // not for client>server yet
 
 		case "req":
-			//++ we have a request!
-			//++ switch on header, send reqd if not exists
-			//++ create a Deferred and send reqa
-			//++ call procedure with given details and the Deferred
-			// all done
+			c.provider.proceduresLock.RLock()
+			proc, ok := c.provider.procedures[in.Procedure]
+			c.provider.proceduresLock.RUnlock()
+			if !ok {
+				if c.provider.Debug {
+					log.Printf("Request for procedure '%s', but that is not registered.\n", in.Procedure)
+				}
+				c.sendRequestResponse("reqd", in.CallbackID)
+				continue
+			}
+			c.sendRequestResponse("reqa", in.CallbackID)
+			deferred := &Deferred{
+				conn:       c,
+				deferredID: in.DeferredID,
+			}
+			proc(in.Data, deferred)
+			if !deferred.done {
+				deferred.Reject("procedure did not resolve nor reject")
+			}
 
 		case "reqa", "reqd":
 			c.callbackChannelsLock.Lock()

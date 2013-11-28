@@ -4,6 +4,7 @@ import (
 	"code.google.com/p/go.net/websocket"
 	"github.com/GeertJohan/go.incremental"
 	"net/http"
+	"sync"
 )
 
 // Provider implements the http.Handler interface
@@ -12,6 +13,10 @@ type Provider struct {
 
 	// conn id counter
 	idCounter incremental.Uint64
+
+	// registered procedures
+	proceduresLock sync.RWMutex
+	procedures     map[string]ProcedureFunc
 
 	// BeforeWebsocket can be set to perform additional checks on a new connection (e.g. auth, check origin, etc.)
 	// When false is returned, the connection is dropped. The funciton itself is responsible for correcly replying to the client with a http status code
