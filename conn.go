@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/GeertJohan/go.incremental"
+	"io"
+	"log"
 	"sync"
 )
 
@@ -82,19 +84,20 @@ func (p *promise) waitForFeedback() {
 	<-p.waitCh
 }
 
-// Call runs the procedure and returns when the call is completed
+// CallAndWait runs the procedure and returns when the call is completed and resolve/reject was ran
+// An error is returned immediatly when the procedure with given name could not be called (name not registered in client or connection broken).
+func (c *Conn) CallAndWait(name string, data interface{}, resolve PromiseFunc, reject PromiseFunc, notify PromiseFunc) error {
+	return c.call(true, name, data, resolve, reject, notify)
+}
+
+// Call runs the procedure and returns when the request for a procedure call has been made, but has not necicarily completed yet.
+// The resolve/reject/notify function can be called later-on. An error is returned when the given procedure name does not exist.
 // An error is returned immediatly when the procedure with given name could not be called (name not registered in client or connection broken).
 func (c *Conn) Call(name string, data interface{}, resolve PromiseFunc, reject PromiseFunc, notify PromiseFunc) error {
 	return c.call(false, name, data, resolve, reject, notify)
 }
 
-// Call runs the procedure and returns when the call is completed
-// An error is returned immediatly when the procedure with given name could not be called (name not registered in client or connection broken).
-func (c *Conn) CallAsync(name string, data interface{}, resolve PromiseFunc, reject PromiseFunc, notify PromiseFunc) error {
-	return c.call(true, name, data, resolve, reject, notify)
-}
-
-func (c *Conn) call(async bool, name string, data interface{}, resolve PromiseFunc, reject PromiseFunc, notify PromiseFunc) error {
+func (c *Conn) call(sync bool, name string, data interface{}, resolve PromiseFunc, reject PromiseFunc, notify PromiseFunc) error {
 	if resolve == nil || reject == nil {
 		return errors.New("resolve and reject must be set with a valid PromiseFunc")
 	}
@@ -113,11 +116,11 @@ func (c *Conn) call(async bool, name string, data interface{}, resolve PromiseFu
 		return err
 	}
 
-	// async or sync wait for feedback
-	if async {
-		go p.waitForFeedback()
-	} else {
+	// sync or async
+	if sync {
 		p.waitForFeedback()
+	} else {
+		go p.waitForFeedback()
 	}
 
 	// all done
@@ -152,7 +155,16 @@ func (c *Conn) receiveAndHandle() {
 		in := &messageIn{}
 		err := websocket.JSON.Receive(c.conn, in)
 		if err != nil {
-			panic(err)
+			if c.provider.Debug {
+				log.Printf("Closing connection %d.\n", c.connID)
+			}
+			//++ clean up
+
+			// panic if error isn't os.EOF
+			if err != io.EOF {
+				panic(err)
+			}
+			return
 		}
 		switch in.Type {
 		// case "lor": // not for client>server yet
@@ -202,7 +214,7 @@ func (c *Conn) receiveAndHandle() {
 			p, ok := c.promises[in.DeferredID]
 			if !ok {
 				if c.provider.Debug {
-					fmt.Printf("Got msg w/ type: \"%s\", def_id: %s but could not find promise\n", in.Type, in.DeferredID)
+					fmt.Printf("Got msg w/ type: \"%s\", def_id: %d but could not find promise\n", in.Type, in.DeferredID)
 				}
 				c.callbackChannelsLock.Unlock()
 				continue
@@ -226,7 +238,7 @@ func (c *Conn) receiveAndHandle() {
 			p, ok := c.promises[in.DeferredID]
 			if !ok {
 				if c.provider.Debug {
-					fmt.Printf("Got msg w/ type: \"not\", def_id: %s but could not find promise\n", in.DeferredID)
+					fmt.Printf("Got msg w/ type: \"not\", def_id: %d but could not find promise\n", in.DeferredID)
 				}
 				c.callbackChannelsLock.Unlock()
 				continue

@@ -30,6 +30,7 @@ func main() {
 		log.Printf("new incomming connection!")
 		return true
 	}
+	p.Debug = true
 	http.Handle("/ango-websocket", p)
 
 	// listen and serve
