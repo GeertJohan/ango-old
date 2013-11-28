@@ -1,7 +1,9 @@
 
 angular.module('ango', [])
 	.factory('Ango', function($q, $http) {
-		var AngoService = {};
+		var AngoService = {
+			procedures: {},
+		};
 
 		// Send is a fire-and-forget method to send data to a service
 		// This looks up a normal (no callback) service handler
@@ -36,9 +38,8 @@ angular.module('ango', [])
 
 		var ws = new WebSocket("ws://"+window.location.href.split("/")[2]+"/ango-websocket");
 
-		ws.onopen = function(){	
-			console.log("websocket has been opened!");
-			ws.send(AuthService.authKey);
+		ws.onopen = function(){
+			//++
 		}
 
 		ws.onmessage = function(message) {
@@ -50,6 +51,15 @@ angular.module('ango', [])
 		}
 		ws.onclose = function() {
 			//++ run hooks?
+		}
+
+		function sendPromiseFullfillment(type, def_id, data) {
+			var out = {
+				type: type,
+				def_id: def_id,
+				data: data,
+			};
+			ws.send(JSON.stringify(out));
 		}
 
 		function handler(msg) {
@@ -76,7 +86,15 @@ angular.module('ango', [])
 					ws.send(JSON.stringify(out));
 
 					// call procedure
-					proc(msg.data);
+					var deferred = $q.defer();
+					proc(msg.data, deferred);
+					deferred.promise.then(function(data){
+						sendPromiseFullfillment("res", msg.def_id, data);
+					}, function(data) {
+						sendPromiseFullfillment("rej", msg.def_id, data);
+					}, function(data) {
+						sendPromiseFullfillment("not", msg.def_id, data);
+					});
 
 					// all done
 					break;

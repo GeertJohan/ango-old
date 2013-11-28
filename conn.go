@@ -2,6 +2,7 @@ package ango
 
 import (
 	"code.google.com/p/go.net/websocket"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 )
 
 // Conn abstracts the websocket an provides methods to communicate with the client
@@ -151,6 +153,20 @@ func (c *Conn) sendMessage(msg *messageOut) error {
 }
 
 func (c *Conn) receiveAndHandle() {
+
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			c.Call("echo", "some data", func(data json.RawMessage) {
+				log.Printf("have resolve:\n %s\n", hex.Dump(data))
+			}, func(data json.RawMessage) {
+				log.Printf("have reject:\n %s\n", hex.Dump(data))
+			}, func(data json.RawMessage) {
+				log.Printf("have notification:\n %s\n", hex.Dump(data))
+			})
+		}
+	}()
+
 	for {
 		in := &messageIn{}
 		err := websocket.JSON.Receive(c.conn, in)
@@ -181,33 +197,25 @@ func (c *Conn) receiveAndHandle() {
 			//++ call service with given details and the Deferred
 			// all done
 
-		case "reqa":
+		case "reqa", "reqd":
 			c.callbackChannelsLock.Lock()
 			cbch, ok := c.callbackChannels[in.CallbackID]
 			if !ok {
 				if c.provider.Debug {
-					fmt.Printf("Got msg w/ type: \"reqa\", cb_id: %d but could not find handler\n", in.CallbackID)
+					fmt.Printf("Got msg w/ type: \"%s\", cb_id: %d but could not find handler\n", in.Type, in.CallbackID)
 				}
 				c.callbackChannelsLock.Unlock()
 				continue
 			}
 			delete(c.callbackChannels, in.CallbackID)
 			c.callbackChannelsLock.Unlock()
-			cbch <- callback{true, ""}
 
-		case "reqd":
-			c.callbackChannelsLock.Lock()
-			cbch, ok := c.callbackChannels[in.CallbackID]
-			if !ok {
-				if c.provider.Debug {
-					fmt.Printf("Got msg w/ type: \"reqd\", cb_id: %d but could not find handler\n", in.CallbackID)
-				}
-				c.callbackChannelsLock.Unlock()
-				continue
+			switch in.Type {
+			case "reqa":
+				cbch <- callback{true, ""}
+			case "reqd":
+				cbch <- callback{false, in.Error}
 			}
-			delete(c.callbackChannels, in.CallbackID)
-			c.callbackChannelsLock.Unlock()
-			cbch <- callback{false, in.Error}
 
 		case "res", "rej":
 			c.promisesLock.Lock()
@@ -228,23 +236,14 @@ func (c *Conn) receiveAndHandle() {
 				p.resolveFn(in.Data)
 			case "rej":
 				p.rejectFn(in.Data)
+			case "not":
+				p.notifyFn(in.Data)
 			}
 
-			// wait for res/rej is over
-			p.waitCh <- true
-
-		case "not":
-			c.promisesLock.Lock()
-			p, ok := c.promises[in.DeferredID]
-			if !ok {
-				if c.provider.Debug {
-					fmt.Printf("Got msg w/ type: \"not\", def_id: %d but could not find promise\n", in.DeferredID)
-				}
-				c.callbackChannelsLock.Unlock()
-				continue
+			if in.Type != "not" {
+				// the wait for res/rej is over
+				p.waitCh <- true
 			}
-			c.promisesLock.Unlock()
-			p.notifyFn(in.Data)
 
 		default:
 			if c.provider.Debug {

@@ -30,9 +30,11 @@ func NewProvider() *Provider {
 
 func (p *Provider) setupWebsocket(wsConn *websocket.Conn) {
 	c := &Conn{
-		provider: p,
-		connID:   p.idCounter.Next(),
-		conn:     wsConn,
+		provider:         p,
+		connID:           p.idCounter.Next(),
+		conn:             wsConn,
+		callbackChannels: make(map[uint64](chan callback)),
+		promises:         make(map[uint64]*promise),
 	}
 
 	c.receiveAndHandle()
