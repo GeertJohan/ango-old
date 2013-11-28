@@ -5,9 +5,9 @@ angular.module('ango', [])
 			procedures: {},
 		};
 
-		// Send is a fire-and-forget method to send data to a service
-		// This looks up a normal (no callback) service handler
-		AngoService.Fire = function(service, data) {
+		// Send is a fire-and-forget method to send data to a procedure
+		// This looks up a normal (no callback) procedure handler
+		AngoService.Fire = function(procedure, data) {
 			//++
 			return;
 		}
@@ -16,7 +16,7 @@ angular.module('ango', [])
 		// The returned deferred is resolved by the first response from server.
 		// Also allows server to send notifications (e.g. processing progress).
 		// The given header
-		AngoService.Call = function(service, data) {
+		AngoService.Call = function(procedure, data) {
 			var deferred = $q.defer();
 			//++
 			return deferred.promise;
@@ -39,7 +39,7 @@ angular.module('ango', [])
 		var ws = new WebSocket("ws://"+window.location.href.split("/")[2]+"/ango-websocket");
 
 		ws.onopen = function(){
-			//++
+			console.log('ws opened');
 		}
 
 		ws.onmessage = function(message) {
@@ -47,9 +47,11 @@ angular.module('ango', [])
 		}
 
 		ws.onerror = function() {
+			console.log('ws error');
 			//++ run hooks?
 		}
 		ws.onclose = function() {
+			console.log('ws closed');
 			//++ run hooks?
 		}
 
@@ -66,13 +68,13 @@ angular.module('ango', [])
 			switch(msg.type) {
 				case "req":
 					// lookup procedure
-					var proc = AngoService.procedures[msg.name];
+					var proc = AngoService.procedures[msg.procedure];
 					if(typeof proc != "function") {
 						// send request denied
 						var out = {};
-						out.cb_id = mgs.cb_id;
+						out.cb_id = msg.cb_id;
 						out.type = "reqd";
-						out.error = "procedure with name '" + msg.name + "' is not defined";
+						out.error = "procedure with name '" + msg.procedure + "' is not defined";
 						ws.send(JSON.stringify(out));
 
 						// return, not going to run request

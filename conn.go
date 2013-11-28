@@ -43,9 +43,9 @@ func (c *Conn) registerLinkedObject(lo interface{}) (int64, error) {
 func (c *Conn) Fire(name string, data interface{}) error {
 	// send message with type res and def_id
 	err := c.sendRequest(&messageOut{
-		Type:    "req",
-		Service: name,
-		Data:    data,
+		Type:      "req",
+		Procedure: name,
+		Data:      data,
 	})
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func (c *Conn) call(sync bool, name string, data interface{}, resolve PromiseFun
 	// send message with type res and def_id
 	err := c.sendRequest(&messageOut{
 		Type:       "req",
-		Service:    name,
+		Procedure:  name,
 		Data:       data,
 		DeferredID: &p.id,
 	})
@@ -130,12 +130,20 @@ func (c *Conn) call(sync bool, name string, data interface{}, resolve PromiseFun
 }
 
 func (c *Conn) sendRequest(msg *messageOut) error {
+	// setup callback for the request (callback reqa/reqd)
 	c.callbackChannelsLock.Lock()
 	cbid := c.callbackInc.Next()
 	msg.CallbackID = &cbid
 	cbch := make(chan callback, 1)
 	c.callbackChannels[cbid] = cbch
 	c.callbackChannelsLock.Unlock()
+
+	// send message
+	err := c.sendMessage(msg)
+	if err != nil {
+		return err
+	}
+
 	//++ add timeout?
 	cb := <-cbch
 	if cb.accepted {
@@ -155,15 +163,17 @@ func (c *Conn) sendMessage(msg *messageOut) error {
 func (c *Conn) receiveAndHandle() {
 
 	go func() {
-		for {
-			time.Sleep(1 * time.Second)
-			c.Call("echo", "some data", func(data json.RawMessage) {
-				log.Printf("have resolve:\n %s\n", hex.Dump(data))
-			}, func(data json.RawMessage) {
-				log.Printf("have reject:\n %s\n", hex.Dump(data))
-			}, func(data json.RawMessage) {
-				log.Printf("have notification:\n %s\n", hex.Dump(data))
-			})
+		time.Sleep(1 * time.Second)
+		log.Println("going to call echo")
+		err := c.CallAndWait("echo", "some data", func(data json.RawMessage) {
+			log.Printf("have resolve:\n %s\n", hex.Dump(data))
+		}, func(data json.RawMessage) {
+			log.Printf("have reject:\n %s\n", hex.Dump(data))
+		}, func(data json.RawMessage) {
+			log.Printf("have notification:\n %s\n", hex.Dump(data))
+		})
+		if err != nil {
+			log.Printf("error calling echo: %s\n", err)
 		}
 	}()
 
@@ -194,7 +204,7 @@ func (c *Conn) receiveAndHandle() {
 			//++ we have a request!
 			//++ switch on header, send reqd if not exists
 			//++ create a Deferred and send reqa
-			//++ call service with given details and the Deferred
+			//++ call procedure with given details and the Deferred
 			// all done
 
 		case "reqa", "reqd":
