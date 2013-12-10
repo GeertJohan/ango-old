@@ -5,9 +5,9 @@ angular.module('ango', [])
 			procedures: {},
 		};
 
-		// Send is a fire-and-forget method to send data to a procedure
+		// Run is a fire-and-forget method to run a procedure with given data
 		// This looks up a normal (no callback) procedure handler
-		AngoService.Fire = function(procedure, data) {
+		AngoService.Run = function(procedure, data) {
 			//++
 			return;
 		}
