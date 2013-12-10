@@ -1,36 +1,44 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/GeertJohan/ango"
 	"log"
 	"net/http"
 )
 
 type SomeStuff struct {
-	ango.LinkedObject // not very nice that it must be a pointer
-	Foo               string
-	Bar               string
+	ango.LinkedObject
+	Foo string
+	Bar string
 }
 
 func main() {
-	ss := SomeStuff{
-		Foo: "foo",
-		Bar: "bar",
-	}
-	ango.LinkedObjectEater(ss)
-	c := &ango.Conn{}
-	c.Call("hi", nil, nil, nil, nil)
 
+	// serve static files and the latest ango.js
 	http.Handle("/", http.FileServer(http.Dir("./files")))
 	http.Handle("/ango.js", http.FileServer(http.Dir("../")))
 
-	// create new provider, host it on
+	// create and setup new provider
 	p := ango.NewProvider()
 	p.BeforeWebsocket = func(w http.ResponseWriter, r *http.Request) bool {
 		log.Printf("new incomming connection!")
 		return true
 	}
 	p.Debug = true
+
+	p.RegisterProcedureFunc("getStuff", func(data json.RawMessage, def *ango.Deferred) {
+		// create SomeStuff
+		stuff := SomeStuff{
+			Foo: "foo",
+			Bar: "bar",
+		}
+
+		// resolve defered with stuff
+		def.Resolve(stuff)
+	})
+
+	// hook provider onto a custom url
 	http.Handle("/ango-websocket", p)
 
 	// listen and serve

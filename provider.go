@@ -28,7 +28,9 @@ type Provider struct {
 
 // NewProvider create a new Provider instance
 func NewProvider() *Provider {
-	p := &Provider{}
+	p := &Provider{
+		procedures: make(map[string]ProcedureFunc),
+	}
 	p.wsHandler = websocket.Handler(p.setupWebsocket)
 	return p
 }

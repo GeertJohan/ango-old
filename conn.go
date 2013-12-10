@@ -19,10 +19,12 @@ type Conn struct {
 	connID   uint64
 	conn     *websocket.Conn
 
+	// request callbacks
 	callbackInc          incremental.Uint64
 	callbackChannels     map[uint64](chan callback)
 	callbackChannelsLock sync.Mutex
 
+	// call promises
 	promiseInc   incremental.Uint64
 	promises     map[uint64]*promise
 	promisesLock sync.Mutex
@@ -31,11 +33,7 @@ type Conn struct {
 type callback struct {
 	accepted bool   // accepted=true, denied=false
 	err      string // optionally error, why it was denied
-}
-
-func (c *Conn) registerLinkedObject(lo interface{}) (int64, error) {
-	//++ check that lo is actually a linkedObject
-	return 0, errors.New("not implemented yet")
+	newID    uint64 // client-side created ID, if any
 }
 
 // Fire is a fire-and-forget method to run a named procedure on the connected client
@@ -80,6 +78,17 @@ func (c *Conn) newPromise(resolve PromiseFunc, reject PromiseFunc, notify Promis
 	c.promisesLock.Unlock()
 
 	return p
+}
+
+func (c *Conn) newCallbackChan() (uint64, chan callback) {
+	// setup callback for the request (callback reqa/reqd and lora/lord)
+	c.callbackChannelsLock.Lock()
+	cbid := c.callbackInc.Next()
+	cbch := make(chan callback, 1)
+	c.callbackChannels[cbid] = cbch
+	c.callbackChannelsLock.Unlock()
+	return cbid, cbch
+
 }
 
 func (p *promise) waitForFeedback() {
@@ -130,13 +139,9 @@ func (c *Conn) call(sync bool, name string, data interface{}, resolve PromiseFun
 }
 
 func (c *Conn) sendRequest(msg *messageOut) error {
-	// setup callback for the request (callback reqa/reqd)
-	c.callbackChannelsLock.Lock()
-	cbid := c.callbackInc.Next()
+	// create new callback and link to message
+	cbid, cbch := c.newCallbackChan()
 	msg.CallbackID = &cbid
-	cbch := make(chan callback, 1)
-	c.callbackChannels[cbid] = cbch
-	c.callbackChannelsLock.Unlock()
 
 	// send message
 	err := c.sendMessage(msg)
@@ -144,7 +149,7 @@ func (c *Conn) sendRequest(msg *messageOut) error {
 		return err
 	}
 
-	//++ add timeout?
+	//++ TODO: add timeout?
 	cb := <-cbch
 	if cb.accepted {
 		return nil
@@ -201,13 +206,6 @@ func (c *Conn) receiveAndHandle() {
 			return
 		}
 		switch in.Type {
-		// case "lor": // not for client>server yet
-
-		case "lora":
-			//++ finish linked object registration
-
-		// case "lou": // not for client>server yet
-
 		case "req":
 			c.provider.proceduresLock.RLock()
 			proc, ok := c.provider.procedures[in.Procedure]
@@ -229,7 +227,8 @@ func (c *Conn) receiveAndHandle() {
 				deferred.Reject("procedure did not resolve nor reject")
 			}
 
-		case "reqa", "reqd":
+		case "reqa", "reqd", "lora", "lord":
+			// find callback channel
 			c.callbackChannelsLock.Lock()
 			cbch, ok := c.callbackChannels[in.CallbackID]
 			if !ok {
@@ -244,9 +243,24 @@ func (c *Conn) receiveAndHandle() {
 
 			switch in.Type {
 			case "reqa":
-				cbch <- callback{true, ""}
+				cbch <- callback{
+					accepted: true,
+				}
 			case "reqd":
-				cbch <- callback{false, in.Error}
+				cbch <- callback{
+					accepted: false,
+					err:      in.Error,
+				}
+			case "lora":
+				cbch <- callback{
+					accepted: true,
+					newID:    in.LinkedObjectID,
+				}
+			case "lord":
+				cbch <- callback{
+					accepted: false,
+					err:      in.Error,
+				}
 			}
 
 		case "res", "rej":

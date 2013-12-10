@@ -10,8 +10,9 @@ Every message sent over the websocket follows a basic structure, with child elem
 ```json
 {
 	// type of information contained in this message
-	//		"lor": linked object registration, only server > client for now
-	//		"lora": linked object registration accept, only sent client > server for now
+	//		"lor": linked object registration, only server > client
+	//		"lora": linked object registration accept, only sent client > server
+	//		"lord": linked object registration deny, only sent client > server
 	//		"lou": linked object update, only server > client for now
 	//		"req": request from one side to the other
 	//		"reqa": request accepted (procedure exists)
