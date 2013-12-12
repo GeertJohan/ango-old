@@ -24,12 +24,6 @@ func (d *Deferred) Resolve(data interface{}) error {
 	}
 	d.done = true
 
-	// try data to be a linked object
-	data, err = d.conn.tryLinkedObject(data)
-	if err != nil {
-		return err
-	}
-
 	// send message with type res and def_id
 	err = d.conn.sendMessage(&messageOut{
 		Type:       "res",

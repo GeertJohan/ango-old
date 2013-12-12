@@ -2,7 +2,6 @@ package ango
 
 import (
 	"code.google.com/p/go.net/websocket"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"io"
 	"log"
 	"sync"
-	"time"
 )
 
 // Conn abstracts the websocket an provides methods to communicate with the client
@@ -158,6 +156,20 @@ func (c *Conn) sendRequest(msg *messageOut) error {
 }
 
 func (c *Conn) sendMessage(msg *messageOut) error {
+
+	// try data to be a linked object
+	if msg.Data != nil {
+		loid, err := c.tryLinkedObject(msg.Data)
+		if err != nil {
+			return err
+		}
+		if loid != nil {
+			msg.Data = nil
+			msg.LinkedObjectID = loid
+		}
+	}
+
+	// send message over websocket
 	err := websocket.JSON.Send(c.conn, msg)
 	if err != nil {
 		return err
@@ -174,22 +186,7 @@ func (c *Conn) sendRequestResponse(typ string, cbid uint64) error {
 }
 
 func (c *Conn) receiveAndHandle() {
-
-	go func() {
-		time.Sleep(1 * time.Second)
-		log.Println("going to call echo")
-		err := c.CallAndWait("echo", "some data", func(data json.RawMessage) {
-			log.Printf("have resolve:\n%s\n", hex.Dump(data))
-		}, func(data json.RawMessage) {
-			log.Printf("have reject:\n%s\n", hex.Dump(data))
-		}, func(data json.RawMessage) {
-			log.Printf("have notification:\n%s\n", hex.Dump(data))
-		})
-		if err != nil {
-			log.Printf("error calling echo: %s\n", err)
-		}
-	}()
-
+	// loop and receive messages
 	for {
 		in := &messageIn{}
 		err := websocket.JSON.Receive(c.conn, in)
@@ -203,7 +200,7 @@ func (c *Conn) receiveAndHandle() {
 			if err != io.EOF {
 				panic(err)
 			}
-			return
+			return // closes connection
 		}
 		switch in.Type {
 		case "req":
@@ -257,6 +254,7 @@ func (c *Conn) receiveAndHandle() {
 					newID:    in.LinkedObjectID,
 				}
 			case "lord":
+				//++ TODO: this never really happens, now does it?
 				cbch <- callback{
 					accepted: false,
 					err:      in.Error,

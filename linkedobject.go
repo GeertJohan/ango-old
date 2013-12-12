@@ -1,5 +1,9 @@
 package ango
 
+import (
+	"errors"
+)
+
 // LinkedObject should be embedded
 type LinkedObject struct {
 	prov *Provider
@@ -44,16 +48,12 @@ type loIface interface {
 	setLink(uint64, uint64)
 }
 
-type link struct {
-	LinkedObjectID uint64 `json:"xxxAngoLinkedObjectID"` // picked up by ango.js
-}
-
 // eats a linked object and returns a link.
 // when not a linked object, returns given object without change
-func (c *Conn) tryLinkedObject(data interface{}) (interface{}, error) {
+func (c *Conn) tryLinkedObject(data interface{}) (*uint64, error) {
 	lo, ok := data.(loIface)
 	if !ok {
-		return data, nil
+		return nil, nil
 	}
 
 	// check if provider matches for this linked object
@@ -63,8 +63,7 @@ func (c *Conn) tryLinkedObject(data interface{}) (interface{}, error) {
 		if lo.provider() == nil {
 			lo.setProvider(c.provider)
 		} else {
-			//++ TODO: make this an error?
-			panic("linked object was registered with a different provider")
+			return nil, errors.New("linked object was registered with a different provider")
 		}
 	}
 
@@ -79,9 +78,7 @@ func (c *Conn) tryLinkedObject(data interface{}) (interface{}, error) {
 	}
 
 	// return link
-	return &link{
-		LinkedObjectID: id,
-	}, nil
+	return &id, nil
 }
 
 // registerLinkedObject registers a linked object.

@@ -3,6 +3,7 @@ angular.module('ango', [])
 	.factory('Ango', function($q, $http) {
 		var AngoService = {
 			procedures: {},
+			callbacks: {},
 		};
 
 		// Run is a fire-and-forget method to run a procedure with given data
@@ -17,8 +18,22 @@ angular.module('ango', [])
 		// Also allows server to send notifications (e.g. processing progress).
 		// The given header
 		AngoService.Call = function(procedure, data) {
+			// create deferred
 			var deferred = $q.defer();
-			//++
+			// register callback
+			AngoService.callbackCounter++;
+			cbid = AngoService.callbackCounter
+			AngoService.callbacks[cbid] = deferred;
+
+			var out = {
+				type: "req",
+				procedure: procedure,
+				data: data,
+				cb_id: cbid,
+				def_id: cbid,
+			};
+
+			// all done
 			return deferred.promise;
 		};
 
@@ -101,24 +116,61 @@ angular.module('ango', [])
 					// all done
 					break;
 
+				case "reqa":
+					// reqa is ignored here
+					break;
+			
+				case "reqd":
+					var deferred = AngoService.callbacks[msg.cb_id];
+					delete AngoService.callbacks[msg.cb_id];
+					deferred.reject(msg.err);
+					break;
+
 				case "res":
-					//++ resolve outstanding deferred
+					var deferred = AngoService.callbacks[msg.cb_id];
+					delete AngoService.callbacks[msg.cb_id];
+					//++ TODO: see if lo_id is set instead of data, use linked object
+					deferred.resolve(msg.data);
 					break;
 
 				case "rej":
-					//++ reject outstanding deferred
+					var deferred = AngoService.callbacks[msg.cb_id];
+					delete AngoService.callbacks[msg.cb_id];
+					//++ TODO: see if lo_id is set instead of data, use linked object
+					deferred.reject(msg.data);
 					break;
 
 				case "not":
-					//++ notify outstanding deferred
+					var deferred = AngoService.callbacks[msg.cb_id];
+					//++ TODO: see if lo_id is set instead of data, use linked object
+					deferred.notify(msg.data);
 					break;
 
 				case "lor":
-					//++ register linked object
+					AngoService.linkedObjectsCounter++;
+					var id = AngoService.linkedObjectsCounter;
+					AngoService.linkedObjects[id] = msg.data;
+					var out = {
+						type: "lora",
+						lo_id: id,
+						cb_id: msg.cb_id,
+					};
+					ws.send(JSON.stringify(out));
 					break;
 
 				case "lou":
-					//++ update linked object
+					$apply(function() {
+						// get linked object from register
+						var obj = AngoService.linkedObjects[msg.lo_id];
+						// remove old elements from registered linked object
+						for (var key in obj) {
+							delete obj[key];
+						}
+						// copy elements to registered linked object
+						for (var key in msg.data) {
+							obj[key] = msg.data[key];
+						}
+					});
 					break;
 
 				default:
