@@ -2,6 +2,8 @@
 
 **In development**, look arround but don't use this just yet :)
 
+**NOTE: Development on this project has stopped. This project has been renamed and is marked for deletion. A new project also named 'ango' has emerged, with essentially the same goal as this one, but a totally different approach. For more information, visit: https://github.com/GeertJohan/ango**
+
 ### RPC
 
 ### Linked Object (Server > Client sync)
